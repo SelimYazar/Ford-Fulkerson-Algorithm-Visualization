@@ -1,0 +1,394 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Ford-Fulkerson Algorithm</title>
+    <style>
+      /* Sayfa genel stil ayarları */
+      body {
+        font-family: Arial, sans-serif;
+        margin: 20px;
+        text-align: center;
+        background: linear-gradient(to bottom, #f0f4f8, #d9e9f9);
+      }
+
+      /* Kontrol paneli tasarımı */
+      #controls {
+        margin-bottom: 20px;
+      }
+
+      /* Grafik alanı (canvas) stil ayarları */
+      canvas {
+        border: 2px solid #333;
+        display: block;
+        margin: 20px auto;
+        background: radial-gradient(circle, #ffffff, #d0e5f5);
+        border-radius: 10px;
+      }
+
+      /* Tablo stil ayarları */
+      table {
+        margin: 20px auto;
+        border-collapse: collapse;
+        width: 80%;
+        box-shadow: 0px 4px 6px rgba(0, 0, 0, 0.1);
+      }
+
+      /* Tablo hücre stil ayarları */
+      th,
+      td {
+        border: 1px solid #ddd;
+        padding: 12px;
+        text-align: center;
+        font-size: 14px;
+      }
+
+      /* Tablo başlık hücreleri */
+      th {
+        background-color: #007bff;
+        color: white;
+      }
+
+      /* Buton stil ayarları */
+      button {
+        padding: 10px 15px;
+        background-color: #007bff;
+        color: white;
+        border: none;
+        border-radius: 5px;
+        cursor: pointer;
+        font-size: 14px;
+        margin: 5px;
+      }
+
+      button:hover {
+        background-color: #0056b3;
+      }
+
+      /* Tablo satır animasyonları */
+      .slide-in {
+        animation: slide-in 1s ease-out forwards;
+      }
+
+      @keyframes slide-in {
+        from {
+          opacity: 0;
+          transform: translateX(-100%);
+        }
+        to {
+          opacity: 1;
+          transform: translateX(0);
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <h1 style="color: #333">Ford-Fulkerson Algorithm with Enhanced Visuals</h1>
+    <!-- Kontrol paneli -->
+    <div id="controls">
+      <!-- Kullanıcıdan düğüm sayısı, kaynak ve hedef düğüm bilgisi alınır -->
+      <label
+        >Number of Nodes:
+        <input
+          type="number"
+          id="nodeCount"
+          min="2"
+          value="7"
+          style="margin: 5px"
+      /></label>
+      <label
+        >Start Node (s):
+        <input
+          type="number"
+          id="startNode"
+          min="1"
+          value="1"
+          style="margin: 5px"
+      /></label>
+      <label
+        >Sink Node (t):
+        <input type="number" id="endNode" min="1" value="7" style="margin: 5px"
+      /></label>
+      <button onclick="generateGraph()">Generate Graph</button>
+      <!-- Grafik oluşturma butonu -->
+      <button onclick="runFordFulkerson()">Run Algorithm</button>
+      <!-- Algoritmayı çalıştırma butonu -->
+    </div>
+    <!-- Grafik alanı -->
+    <canvas id="graphCanvas" width="1000" height="700"></canvas>
+    <h2 style="color: #333">Paths and Maximum Flow</h2>
+    <!-- Sonuç tablosu -->
+    <table id="resultsTable">
+      <thead>
+        <tr>
+          <th>Path</th>
+          <th>Flow</th>
+          <th>Updated Maximum Flow</th>
+        </tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+
+    <script>
+      const canvas = document.getElementById("graphCanvas"); // Canvas elemanı
+      const ctx = canvas.getContext("2d");
+      let nodes = []; // Düğüm bilgilerini tutar
+      let edges = []; // Kenar bilgilerini tutar
+      let maxFlow = 0; // Maksimum akış değeri
+      let residualGraph = {};
+      let graphGenerated = false;
+      let arrowOffset = 0;
+      const arrowSpeed = 0.2;
+      const pathColor = "#007bff";
+      const arrowColor = "#ff4500";
+      const flowTextColor = "#32cd32";
+      const capacityTextColor = "#ff6347";
+
+      /**
+       * Kullanıcının girdiği bilgilere göre bir grafik oluşturur.
+       */
+      function generateGraph() {
+        graphGenerated = false; // Yeni grafik oluşturulduğunda önceki durum sıfırlanır
+        const nodeCount = parseInt(document.getElementById("nodeCount").value); // Düğüm sayısını alır
+        const startNode =
+          parseInt(document.getElementById("startNode").value) - 1; // Kaynak düğüm
+        const endNode = parseInt(document.getElementById("endNode").value) - 1; // Hedef düğüm
+
+        if (startNode === endNode) {
+          alert("Start node and sink node must be different!");
+          return;
+        }
+
+        nodes = []; // Düğümleri sıfırlar
+        edges = []; // Kenarları sıfırlar
+        maxFlow = 0; // Maksimum akışı sıfırlar
+        residualGraph = {}; // Kalıntı grafiğini sıfırlar
+        document.querySelector("#resultsTable tbody").innerHTML = ""; // Sonuç tablosunu temizler
+
+        // Rastgele düğüm koordinatları ve özelliklerini oluşturur
+        for (let i = 0; i < nodeCount; i++) {
+          nodes.push({
+            id: i,
+            x: Math.random() * (canvas.width - 200) + 100, // Canvas sınırları içinde rastgele x
+            y: Math.random() * (canvas.height - 200) + 100, // Rastgele y
+            label:
+              i === startNode ? "s" : i === endNode ? "t" : (i + 1).toString(), // Etiketleme
+          });
+          residualGraph[i] = {}; // Her düğüm için kalıntı grafiği başlatılır
+        }
+
+        // Rastgele kapasitelerle kenarları oluşturur
+        for (let i = 0; i < nodeCount; i++) {
+          for (let j = 0; j < nodeCount; j++) {
+            if (i !== j && Math.random() > 0.5) {
+              // Rastgele kenar ekleme
+              const capacity = Math.floor(Math.random() * 20) + 1; // Kapasite değeri
+              edges.push({
+                from: i,
+                to: j,
+                capacity: capacity,
+                flow: 0, // Başlangıçta akış 0
+              });
+              residualGraph[i][j] = capacity; // Kalıntı grafiğine kapasiteyi ekler
+            }
+          }
+        }
+
+        graphGenerated = true; // Grafik başarıyla oluşturuldu
+        drawGraph(); // Grafiği çizer
+      }
+
+      /**
+       * Grafiği çizer ve varsa hareketli okları animasyonla gösterir.
+       */
+      function drawGraph(highlightedPathEdges = [], animate = false) {
+        ctx.clearRect(0, 0, canvas.width, canvas.height); // Canvas'ı temizler
+
+        // Kenarları çizer
+        edges.forEach((edge) => {
+          const fromNode = nodes.find((node) => node.id === edge.from); // Kaynak düğüm
+          const toNode = nodes.find((node) => node.id === edge.to); // Hedef düğüm
+
+          const offsetX = (toNode.y - fromNode.y) * 0.03;
+          const offsetY = (fromNode.x - toNode.x) * 0.03;
+
+          ctx.beginPath();
+          ctx.moveTo(fromNode.x + offsetX, fromNode.y + offsetY); // Başlangıç noktası
+          ctx.lineTo(toNode.x + offsetX, toNode.y + offsetY); // Bitiş noktası
+          ctx.strokeStyle = highlightedPathEdges.includes(edge)
+            ? pathColor
+            : "gray";
+          ctx.lineWidth = highlightedPathEdges.includes(edge) ? 3 : 1;
+          ctx.stroke(); // Çizimi gerçekleştirir
+
+          // Hareketli okları çizer
+          if (highlightedPathEdges.includes(edge)) {
+            drawMovingArrow(fromNode, toNode);
+          }
+
+          // Kenar üzerinde akış ve kapasiteyi gösterir
+          const midX = (fromNode.x + toNode.x) / 2;
+          const midY = (fromNode.y + toNode.y) / 2;
+
+          ctx.font = "14px Arial";
+
+          // Akış yazısı (yeşil)
+          ctx.fillStyle = flowTextColor;
+          ctx.fillText(`${edge.flow}`, midX - 10, midY - 10);
+
+          // Kapasite yazısı (kırmızı)
+          ctx.fillStyle = capacityTextColor;
+          ctx.fillText(`/${edge.capacity}`, midX + 10, midY - 10);
+        });
+
+        // Düğümleri çizer
+        nodes.forEach((node) => {
+          ctx.beginPath();
+          ctx.arc(node.x, node.y, 30, 0, 2 * Math.PI); // Çember çizer
+          ctx.fillStyle =
+            node.label === "s"
+              ? "#32cd32"
+              : node.label === "t"
+              ? "#ff4500"
+              : "#00bfff"; // Renk seçimi
+          ctx.fill();
+          ctx.strokeStyle = "#333";
+          ctx.lineWidth = 3;
+          ctx.stroke();
+          ctx.fillStyle = "white";
+          ctx.font = "bold 16px Arial";
+          ctx.fillText(node.label, node.x - 8, node.y + 6);
+        });
+
+        // Animasyon için ok ofsetini günceller
+        if (animate) {
+          arrowOffset += arrowSpeed;
+          arrowOffset %= 100;
+          requestAnimationFrame(() => drawGraph(highlightedPathEdges, animate));
+        }
+      }
+
+      /**
+       * Belirtilen iki düğüm arasında hareket eden okları çizer.
+       */
+      function drawMovingArrow(fromNode, toNode) {
+        const dx = toNode.x - fromNode.x;
+        const dy = toNode.y - fromNode.y;
+        const distance = Math.sqrt(dx * dx + dy * dy); // İki düğüm arasındaki mesafe
+
+        const progress = (arrowOffset % distance) / distance; // Okun ilerleme yüzdesi
+
+        const arrowX = fromNode.x + progress * dx; // Okun x konumu
+        const arrowY = fromNode.y + progress * dy; // Okun y konumu
+
+        const angle = Math.atan2(dy, dx); // Okun açısı
+
+        ctx.beginPath(); // Yeni bir yol başlatır
+        ctx.moveTo(arrowX, arrowY);
+        ctx.lineTo(
+          arrowX - 10 * Math.cos(angle - Math.PI / 6),
+          arrowY - 10 * Math.sin(angle - Math.PI / 6)
+        ); // Sol kenar
+        ctx.lineTo(
+          arrowX - 10 * Math.cos(angle + Math.PI / 6),
+          arrowY - 10 * Math.sin(angle + Math.PI / 6)
+        ); // Sağ kenar
+        ctx.closePath();
+        ctx.fillStyle = arrowColor;
+        ctx.fill();
+      }
+
+      /**
+       * Ford-Fulkerson algoritmasını çalıştırır ve sonucu görselleştirir.
+       */
+      function runFordFulkerson() {
+        const startNode = nodes.findIndex((node) => node.label === "s"); // Kaynak düğüm
+        const endNode = nodes.findIndex((node) => node.label === "t"); // Hedef düğüm
+
+        const parent = {}; // Yol bilgisi
+        const pathEdges = []; // Yol boyunca bulunan kenarlar
+        const pathNodes = []; // Yol boyunca bulunan düğümler
+        const visited = new Array(nodes.length).fill(false); // Ziyaret edilen düğümleri takip eder
+
+        const queue = [startNode];
+        visited[startNode] = true; // Kaynak düğüm ziyaret edildi
+
+        // Breadth-First Search (BFS) algoritması
+        while (queue.length > 0) {
+          const current = queue.shift(); // Kuyruğun başından düğüm alır
+          for (const neighbor in residualGraph[current]) {
+            // Tüm komşuları kontrol eder
+            if (!visited[neighbor] && residualGraph[current][neighbor] > 0) {
+              // Ziyaret edilmemiş ve kapasitesi olan düğümler
+              queue.push(parseInt(neighbor)); // Kuyruğa ekle
+              parent[neighbor] = current; // Ebeveyn düğümünü sakla
+              visited[neighbor] = true; // Ziyaret edildi olarak işaretle
+              if (parseInt(neighbor) === endNode) break; // Hedef düğüm bulunduğunda döngüden çık
+            }
+          }
+        }
+
+        if (!visited[endNode]) {
+          // Hedef düğüme giden bir yol yoksa
+          alert("No more paths available!"); // Uyarı göster
+          return;
+        }
+
+        // Yolu bul ve minimum yol akışını belirle
+        let pathFlow = Infinity;
+        let v = endNode;
+
+        while (v !== startNode) {
+          const u = parent[v]; // Ebeveyn düğümü al
+          const edge = edges.find((e) => e.from === u && e.to === v); // Yol üzerindeki kenarı bul
+          const residualCapacity = edge.capacity - edge.flow; // Kalıntı kapasitesini hesapla
+          pathFlow = Math.min(pathFlow, residualCapacity); // Minimum yol akışını belirle
+          pathEdges.push(edge); // Kenarı yola ekle
+          pathNodes.push(v); // Düğümü yola ekle
+          v = u; // Bir önceki düğüme geri git
+        }
+        pathNodes.push(startNode); // Kaynak düğümü ekle
+        pathNodes.reverse(); // Yolu ters çevir
+
+        // Akışı güncelle
+        v = endNode;
+        while (v !== startNode) {
+          const u = parent[v];
+          const edge = edges.find((e) => e.from === u && e.to === v);
+          edge.flow += pathFlow; // Kenarın akışını artır
+          residualGraph[u][v] -= pathFlow; // Kalıntı kapasitesini azalt
+          residualGraph[v][u] = (residualGraph[v][u] || 0) + pathFlow; // Geriye kalan kapasiteyi ekle
+          v = u; // Bir önceki düğüme git
+        }
+
+        maxFlow += pathFlow; // Maksimum akışı güncelle
+        updateTable(pathNodes, pathFlow, maxFlow); // Tabloyu güncelle
+        drawGraph(pathEdges, true); // Güncellenmiş grafiği çiz ve animasyonu çalıştır
+      }
+
+      /**
+       * Tabloya yeni bir yol ve akış bilgisi ekler.
+       */
+      function updateTable(pathNodes, flow, maxFlow) {
+        const tbody = document.querySelector("#resultsTable tbody"); // Tablo gövdesi
+        const path = pathNodes.map((n) => nodes[n].label).join(" -> "); // Yolu düğüm etiketleriyle göster
+        const row = document.createElement("tr"); // Yeni tablo satırı oluştur
+        const pathCell = document.createElement("td"); // Yol hücresi
+        const flowCell = document.createElement("td"); // Akış hücresi
+        const maxFlowCell = document.createElement("td"); // Maksimum akış hücresi
+
+        pathCell.textContent = path; // Yol bilgisini hücreye ekle
+        flowCell.textContent = flow; // Akış bilgisini hücreye ekle
+        maxFlowCell.textContent = maxFlow; // Maksimum akış bilgisini hücreye ekle
+
+        row.appendChild(pathCell); // Satıra yol hücresini ekle
+        row.appendChild(flowCell); // Satıra akış hücresini ekle
+        row.appendChild(maxFlowCell); // Satıra maksimum akış hücresini ekle
+
+        row.classList.add("slide-in"); // Animasyon sınıfını ekle
+        tbody.appendChild(row); // Satırı tabloya ekle
+      }
+    </script>
+  </body>
+</html>
